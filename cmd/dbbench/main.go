@@ -13,7 +13,7 @@ import (
 	_ "github.com/denisenkom/go-mssqldb"
 	_ "github.com/go-sql-driver/mysql"
 	_ "github.com/lib/pq"
-	_ "github.com/mattn/go-sqlite3"
+	_ "github.com/ardhipoetra/go-dqlite"
 	"github.com/sj14/dbbench/benchmark"
 	"github.com/sj14/dbbench/databases"
 	"github.com/spf13/pflag"
@@ -56,6 +56,11 @@ func main() {
 		projectID       = gcpFlags.String("project", "", "GCP project ID")
 		databaseID      = gcpFlags.String("database", "", "ID of the Spanner Database")
 		credentialsFile = gcpFlags.String("credentials", "GOOGLE_APPLICATION_CREDENTIALS", "optional file containing GCP credentials. Defaults to GOOGLE_APPLICATION_CREDENTIALS")
+
+		// dqlite flags
+		clusterFlags = pflag.NewFlagSet("cluster", pflag.ExitOnError)
+		leader      = clusterFlags.String("leader", "localhost:9991", "address of the (supposed to be) leader, format ip:port")
+		voter      = clusterFlags.StringSlice("voter", []string{"localhost:9999"}, "address of the (supposed to be) voter, format ip:port")
 
 		// Flag sets for each database. DB specific flags are set in the switch statement below.
 		cassandraFlags = pflag.NewFlagSet("cassandra", pflag.ExitOnError)
@@ -123,11 +128,14 @@ func main() {
 		bencher = databases.NewMSSQL(*host, *port, *user, *pass, *maxconns)
 	case "sqlite":
 		sqliteFlags.AddFlagSet(defaultFlags)
+		sqliteFlags.AddFlagSet(clusterFlags)
+
 		path := sqliteFlags.String("path", "dbbench.sqlite", "database file (sqlite only)")
+		log.Printf("parsing and initiating...")
 		if err := sqliteFlags.Parse(os.Args[2:]); err != nil {
 			log.Fatalf("failed to parse sqlite flags: %v", err)
 		}
-		bencher = databases.NewSQLite(*path)
+		bencher = databases.NewDQLite(*path, *leader, *voter)
 	case "spanner":
 		spannerFlags.AddFlagSet(defaultFlags)
 		spannerFlags.AddFlagSet(gcpFlags)

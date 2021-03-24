@@ -4,43 +4,101 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
-	"os"
+	"context"
 
 	"github.com/sj14/dbbench/benchmark"
+	"github.com/ardhipoetra/go-dqlite/client"
+	"github.com/ardhipoetra/go-dqlite/driver"
+	"github.com/ardhipoetra/go-dqlite/protocol"
 )
 
-// SQLite implements the bencher interface.
-type SQLite struct {
-	db *sql.DB
-}
+var leader_cli *client.Client
+var voter_cli []*client.Client
+
+var leadercli *client.Client
 
 var (
 	dbPath    string
+	leaderu   string
+	voteru 	[]string
 	dbCreated bool // DB file was created by dbbench
 )
 
-// NewSQLite retruns a new SQLite bencher.
-func NewSQLite(path string) *SQLite {
-	dbPath = path
+func connectClients() {
+	// connect each client with dqlite instance
+	leader_cli, _ = client.New(context.Background(), leaderu)
+	for i, v := range voteru {
+		fmt.Printf("%d %v\n", i, v)
+		voter_cli[i], _ = client.New(context.Background(), v)
+	}
+}
 
-	if _, err := os.Stat(path); os.IsNotExist(err) {
-		// We will create the database file.
-		dbCreated = true
+func setupCluster() protocol.NodeStore {
+	// set the inmemnodestore to refer the cluster
+	store := client.NewInmemNodeStore()
+	store.Set(context.Background(), []client.NodeInfo{{Address: leaderu}})
+
+	log.Printf("Find leader...")
+	leadercli, _ := client.FindLeader(context.Background(), store, []client.Option{client.WithDialFunc(client.DefaultDialFunc)}...)
+	log.Printf("Leader is: %s", leadercli)
+
+	for i, v := range voteru {
+		// prepare node 2 and 3 to be added to the leader
+		// the leader by default has ID = 1 or BootstrapID (some hardcoded value)
+		client_voter := client.NodeInfo{ID: uint64(i)+uint64(2), Address: v, Role: client.Voter}
+
+		// add node2
+		log.Printf("(%d) Add Client %s ...", client_voter.ID, client_voter)
+		err := leadercli.Add(context.Background(), client_voter)
+		if err != nil {
+			fmt.Errorf("Cannot add node %s %s\n", client_voter, err)
+		}
 	}
 
+	return store
+}
+
+type DQLite struct {
+	db *sql.DB
+}
+
+func NewDQLite(path string, leader_ string, voter_ []string) *DQLite {
+	dbPath = path
+	leaderu = leader_
+	voteru = voter_
+	voter_cli = make([]*client.Client, len(voter_))
+
+	// connect clients so we can use later
+	log.Printf("Connect to client...")
+	connectClients()
+
+	// setup the cluster
+	log.Printf("Setup the cluster...")
+	store := setupCluster()
+	driver, _ := driver.New(store)
+	sql.Register("dqlite", driver)
+
+	// if _, err := os.Stat(path); os.IsNotExist(err) {
+	// 	// We will create the database file.
+	// 	dbCreated = true
+	// }
+
 	// Automatically creates the DB file if it doesn't exist yet.
-	db, err := sql.Open("sqlite3", fmt.Sprintf("%s?cache=shared", path))
+	db, err := sql.Open("dqlite", "dqlite_benchmark")
 	if err != nil {
 		log.Fatalf("failed to open connection: %v\n", err)
 	}
 
 	db.SetMaxOpenConns(1)
-	p := &SQLite{db: db}
+	p := &DQLite{db: db}
+
+	printCluster()
+
 	return p
 }
 
-// Benchmarks returns the individual benchmark statements for sqlite.
-func (m *SQLite) Benchmarks() []benchmark.Benchmark {
+func (m *DQLite) Benchmarks() []benchmark.Benchmark {
+	log.Printf("Call benchmarks()...")
 	return []benchmark.Benchmark{
 		{Name: "inserts", Type: benchmark.TypeLoop, Stmt: "INSERT INTO dbbench_simple (id, balance) VALUES( {{.Iter}}, {{call .RandInt63}});"},
 		{Name: "selects", Type: benchmark.TypeLoop, Stmt: "SELECT * FROM dbbench_simple WHERE id = {{.Iter}};"},
@@ -55,7 +113,8 @@ func (m *SQLite) Benchmarks() []benchmark.Benchmark {
 }
 
 // Setup initializes the database for the benchmark.
-func (m *SQLite) Setup() {
+func (m *DQLite) Setup() {
+	log.Printf("Do setup...")
 	if _, err := m.db.Exec("CREATE TABLE IF NOT EXISTS dbbench_simple (id INT PRIMARY KEY, balance DECIMAL);"); err != nil {
 		log.Fatalf("failed to create table dbbench_simple: %v\n", err)
 	}
@@ -71,7 +130,7 @@ func (m *SQLite) Setup() {
 }
 
 // Cleanup removes all remaining benchmarking data.
-func (m *SQLite) Cleanup() {
+func (m *DQLite) Cleanup() {
 	if _, err := m.db.Exec("DROP TABLE dbbench_simple"); err != nil {
 		log.Printf("failed to drop table: %v\n", err)
 	}
@@ -86,20 +145,48 @@ func (m *SQLite) Cleanup() {
 	}
 
 	// The DB file existed before, don't remove it.
-	if !dbCreated {
-		return
-	}
+	// if !dbCreated {
+	// 	return
+	// }
 
-	if err := os.Remove(dbPath); err != nil {
-		log.Printf("not able to delete created database file: %v\n", err)
-	}
+	// if err := os.Remove(dbPath); err != nil {
+	// 	log.Printf("not able to delete created database file: %v\n", err)
+	// }
 }
 
 // Exec executes the given statement on the database.
-func (m *SQLite) Exec(stmt string) {
+func (m *DQLite) Exec(stmt string) {
 	//  driver has no support for results
 	_, err := m.db.Exec(stmt)
 	if err != nil {
 		log.Printf("%v failed: %v", stmt, err)
+	}
+}
+
+func printCluster() {
+	var leader_ni *protocol.NodeInfo
+	fmt.Println("Printing cluster..")
+	log.Printf("Printing cluster..")
+
+	if leader_cli != nil {
+		fmt.Println("From Leader:")
+		leader_ni, _ = leader_cli.Leader(context.Background())
+		fmt.Println(leader_ni.ID, " at ", leader_ni.Address)
+		servers, _ := leader_cli.Cluster(context.Background())
+		for _, ni := range servers {
+			fmt.Printf("%s--%s,", ni.Address, ni.Role)
+		}
+		fmt.Println("\n-----------------")
+	}
+
+	for i, v := range voter_cli {
+		fmt.Println("(%d) From Node %s:", i, v)
+		leader_ni, _ = v.Leader(context.Background())
+		fmt.Println(leader_ni.ID, " at ", leader_ni.Address)
+		servers, _ := v.Cluster(context.Background())
+		for _, ni := range servers {
+			fmt.Printf("%s--%s,", ni.Address, ni.Role)
+		}
+		fmt.Println("\n-----------------")
 	}
 }
