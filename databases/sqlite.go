@@ -27,8 +27,9 @@ var (
 func connectClients() {
 	// connect each client with dqlite instance
 	leader_cli, _ = client.New(context.Background(), leaderu)
+	log.Printf("Leader: %v\n", leaderu)
 	for i, v := range voteru {
-		fmt.Printf("%d %v\n", i, v)
+		log.Printf("Voter %d: %v\n", i, v)
 		voter_cli[i], _ = client.New(context.Background(), v)
 	}
 }
@@ -165,13 +166,12 @@ func (m *DQLite) Exec(stmt string) {
 
 func printCluster() {
 	var leader_ni *protocol.NodeInfo
-	fmt.Println("Printing cluster..")
 	log.Printf("Printing cluster..")
 
 	if leader_cli != nil {
-		fmt.Println("From Leader:")
+		log.Println("From Leader:")
 		leader_ni, _ = leader_cli.Leader(context.Background())
-		fmt.Println(leader_ni.ID, " at ", leader_ni.Address)
+		log.Println(leader_ni.ID, " at ", leader_ni.Address)
 		servers, _ := leader_cli.Cluster(context.Background())
 		for _, ni := range servers {
 			fmt.Printf("%s--%s,", ni.Address, ni.Role)
@@ -180,9 +180,9 @@ func printCluster() {
 	}
 
 	for i, v := range voter_cli {
-		fmt.Println("(%d) From Node %s:", i, v)
+		log.Printf("(%d) From Node %s:", i, v)
 		leader_ni, _ = v.Leader(context.Background())
-		fmt.Println(leader_ni.ID, " at ", leader_ni.Address)
+		log.Println("My leader is : ", leader_ni.ID, " at ", leader_ni.Address)
 		servers, _ := v.Cluster(context.Background())
 		for _, ni := range servers {
 			fmt.Printf("%s--%s,", ni.Address, ni.Role)
