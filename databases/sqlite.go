@@ -166,26 +166,42 @@ func (m *DQLite) Exec(stmt string) {
 
 func printCluster() {
 	var leader_ni *protocol.NodeInfo
-	log.Printf("Printing cluster..")
+	var err error
+	var servers []protocol.NodeInfo
+	log.Println("Printing cluster..")
 
 	if leader_cli != nil {
 		log.Println("From Leader:")
-		leader_ni, _ = leader_cli.Leader(context.Background())
-		log.Println(leader_ni.ID, " at ", leader_ni.Address)
-		servers, _ := leader_cli.Cluster(context.Background())
-		for _, ni := range servers {
-			fmt.Printf("%s--%s,", ni.Address, ni.Role)
+		leader_ni, err = leader_cli.Leader(context.Background())
+		if err == nil {
+			log.Println(leader_ni.ID, " at ", leader_ni.Address)
+		}
+
+		servers, err = leader_cli.Cluster(context.Background())
+		if err == nil {
+			for _, ni := range servers {
+				fmt.Printf("%s--%s,", ni.Address, ni.Role)
+			}
+		} else {
+			log.Println("Error in leader node")
 		}
 		fmt.Println("\n-----------------")
 	}
 
 	for i, v := range voter_cli {
 		log.Printf("(%d) From Node %s:", i, v)
-		leader_ni, _ = v.Leader(context.Background())
-		log.Println("My leader is : ", leader_ni.ID, " at ", leader_ni.Address)
-		servers, _ := v.Cluster(context.Background())
-		for _, ni := range servers {
-			fmt.Printf("%s--%s,", ni.Address, ni.Role)
+		leader_ni, err = v.Leader(context.Background())
+		if err == nil {
+			log.Println("My leader is : ", leader_ni.ID, " at ", leader_ni.Address)
+		}
+	
+		servers, err = v.Cluster(context.Background())
+		if err == nil {
+			for _, ni := range servers {
+				fmt.Printf("%s--%s,", ni.Address, ni.Role)
+			}
+		} else {
+			log.Println("Error in node ", i, " at ", v)
 		}
 		fmt.Println("\n-----------------")
 	}
