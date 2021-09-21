@@ -1,6 +1,7 @@
 package benchmark
 
 import (
+	"fmt"
 	"log"
 	"math/rand"
 	"os"
@@ -133,20 +134,22 @@ func (b *bencherExecutor) loop(bencher Bencher, t *template.Template, iterations
 					stmt := buildStmt(t, i)
 					now := time.Now()
 					bencher.Exec(stmt)
-					b.collectStats(now)
+					b.collectStats(now, t, i)
 				}
 			}
 		}(from, to)
 	}
 }
 
-func (b *bencherExecutor) collectStats(start time.Time) {
+func (b *bencherExecutor) collectStats(start time.Time, t *template.Template, i int) {
 	b.mux.Lock()
 	defer b.mux.Unlock()
 
 	b.result.TotalExecutionCount++
 
 	durTime := time.Since(start)
+
+	fmt.Println(t.Name(), "(", i, ") = ", durTime.Microseconds(), " us")
 
 	b.result.TotalExecutionTime += durTime
 
@@ -162,7 +165,7 @@ func (b *bencherExecutor) collectStats(start time.Time) {
 // once runs the benchmark a single time.
 func (b *bencherExecutor) once(bencher Bencher, t *template.Template) {
 	stmt := buildStmt(t, 1)
-	defer b.collectStats(time.Now())
+	defer b.collectStats(time.Now(), t, 1)
 	bencher.Exec(stmt)
 }
 
