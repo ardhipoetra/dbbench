@@ -169,6 +169,15 @@ func (b *bencherExecutor) once(bencher Bencher, t *template.Template) {
 	bencher.Exec(stmt)
 }
 
+func makeRandu32(count uint) []uint32 {
+	var i uint
+	var Items []uint32
+	for i = 0; i < count; i++ {
+		 Items = append(Items, rand.Uint32())
+	 }
+	 return Items
+}
+
 // buildStmt parses the given template with variables and functions to a pure DB statement.
 func buildStmt(t *template.Template, i int) string {
 	sb := &strings.Builder{}
@@ -182,6 +191,7 @@ func buildStmt(t *template.Template, i int) string {
 		RandFloat64     func() float64
 		RandExpFloat64  func() float64
 		RandNormFloat64 func() float64
+		Iterate         func(uint) []uint32
 	}{
 		Iter:            i,
 		Seed:            rand.Seed,
@@ -191,6 +201,7 @@ func buildStmt(t *template.Template, i int) string {
 		RandFloat64:     rand.Float64,
 		RandExpFloat64:  rand.ExpFloat64,
 		RandNormFloat64: rand.NormFloat64,
+		Iterate:         makeRandu32,
 	}
 	if err := t.Execute(sb, data); err != nil {
 		log.Fatalf("failed to execute template: %v", err)
