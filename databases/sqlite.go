@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"context"
+	"strings"
 
 	"github.com/sj14/dbbench/benchmark"
 	"github.com/ardhipoetra/go-dqlite/client"
@@ -157,11 +158,31 @@ func (m *DQLite) Cleanup() {
 
 // Exec executes the given statement on the database.
 func (m *DQLite) Exec(stmt string) {
-	//  driver has no support for results
-	_, err := m.db.Exec(stmt)
-	if err != nil {
-		log.Printf("%v failed: %v", stmt, err)
+
+	if strings.HasPrefix(strings.ToUpper(stmt), "SELECT") {
+		res, err := m.db.Query(stmt)
+		i := 0
+		if err != nil {
+			log.Printf("%v Query failed: %v; res: %v", stmt, err, res)
+		}
+		for res.Next() {
+			i++
+		}
+		if i != 1 {
+			log.Printf("Query length is not 1 but %d", i)
+		}
+		res.Close()
+
+	} else {
+		//  driver has no support for results
+		_, err := m.db.Exec(stmt)
+		if err != nil {
+			log.Printf("%v failed: %v", stmt, err)
+		}
 	}
+
+
+	
 }
 
 func printCluster() {
