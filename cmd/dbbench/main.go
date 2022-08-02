@@ -10,10 +10,10 @@ import (
 	"strings"
 	"time"
 
+	_ "github.com/ardhipoetra/go-dqlite"
 	_ "github.com/denisenkom/go-mssqldb"
 	_ "github.com/go-sql-driver/mysql"
 	_ "github.com/lib/pq"
-	_ "github.com/ardhipoetra/go-dqlite"
 	"github.com/sj14/dbbench/benchmark"
 	"github.com/sj14/dbbench/databases"
 	"github.com/spf13/pflag"
@@ -59,8 +59,8 @@ func main() {
 
 		// dqlite flags
 		clusterFlags = pflag.NewFlagSet("cluster", pflag.ExitOnError)
-		leader      = clusterFlags.String("leader", "localhost:9991", "address of the (supposed to be) leader, format ip:port")
-		voter      = clusterFlags.StringSlice("voter", []string{"localhost:9999"}, "address of the (supposed to be) voter, format ip:port")
+		leader       = clusterFlags.String("leader", "localhost:9991", "address of the (supposed to be) leader, format ip:port")
+		voter        = clusterFlags.StringSlice("voter", []string{}, "address of the (supposed to be) voter, format ip:port")
 
 		// Flag sets for each database. DB specific flags are set in the switch statement below.
 		cassandraFlags = pflag.NewFlagSet("cassandra", pflag.ExitOnError)
